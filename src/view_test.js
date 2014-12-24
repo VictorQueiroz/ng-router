@@ -1,5 +1,5 @@
 describe('view', function () {
-	var $rootScope, bodyView;
+	var $rootScope, $state, body, bodyView;
 
 	beforeEach(module('ngRouter', function ($stateProvider) {
 		$stateProvider
@@ -7,10 +7,20 @@ describe('view', function () {
 				url: '/A',
 				views: {
 					'bodyView': {
-						template: 'bodyView content!',
+						template: 'bodyView content!' +
+						'<div st-view="AView1"></div>' +
+						'<div st-view="AView2"></div>',
 						controller: function ($scope) {
 							console.log($scope)
 						}
+					}
+				}
+			})
+			.state('A.B', {
+				url: '/B',
+				views: {
+					'AView1': {
+						template: 'AView1 content!'
 					}
 				}
 			});
@@ -18,16 +28,36 @@ describe('view', function () {
 
 	beforeEach(inject(function ($injector, $compile) {
 		$rootScope = $injector.get('$rootScope');
+		$state = $injector.get('$state');
+
+		body = angular.element('<div>');
 
 		bodyView = angular.element('<div>');
 		bodyView.attr('st-view', 'bodyView');
 
-		bodyView = $compile(bodyView)($rootScope);
+		body.append(bodyView);
+
+		$compile(body)($rootScope);
 
 		$rootScope.$digest();
 	}));
 
-	it('should do something', inject(function () {
-		
+	afterEach(inject(function ($timeout) {
+		$timeout.flush()
+	}))
+
+	it('should fill the view', inject(function ($animate, $timeout) {
+		$state.go('A');
+		$rootScope.$digest();
+
+		bodyView = body.children('[st-view*="bodyView"]');
+		expect(bodyView.text()).toBe('bodyView content!');
+
+		$state.go('A.B');
+		$rootScope.$digest();
+
+		var AView1 = angular.element(bodyView.children('[st-view]')[1]);
+
+		expect(AView1.children('.ng-scope').text()).toBe('AView1 content!');
 	}));
 });

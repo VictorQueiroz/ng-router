@@ -53,7 +53,7 @@ function $StateProvider () {
 		return this;
 	};
 
-	this.$get = function $StateFactory ($rootScope, $injector, $q) {
+	this.$get = function $StateFactory ($rootScope, $injector, $q, $async) {
 		var $state = {};
 
 		$state.go = function (stateName) {
@@ -63,10 +63,15 @@ function $StateProvider () {
 
 			forEach(nextState.views, function (view, viewName) {
 				var viewLocals = locals[viewName] = angular.extend({}, view.resolve);
-				// resolving all the state dependencies and requests
-				asyncForEach(viewLocals, function (local, key) {
+
+				viewLocals.$template = function () {
+					return view.template;
+				};
+
+				// resolving all the state dependencies and templates
+				$async.forEach(viewLocals, function (value, key) {
 					var next = this.next;
-					var promise = $injector.invoke(local, {}, viewLocals);
+					var promise = isString(value) ? $injector.get(value) : $injector.invoke(value, {}, viewLocals);
 
 					if(promise.then) {
 						return promises.push(promise.then(function (value) {
@@ -88,7 +93,7 @@ function $StateProvider () {
 			$state.current.locals = locals;
 
 			$q.all(promises).then(function () {
-				$rootScope.$broadcast('$stateChangeSuccess', nextState);
+				$rootScope.$broadcast('$stateChangeSuccess');
 			});
 		};
 

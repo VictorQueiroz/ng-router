@@ -12,9 +12,9 @@ function $StViewDirective ($state, $animate, $interpolate) {
 			var currentElement;
 			var previousLeaveAnimation;
 
-			scope.$on('$viewContentLoading', updateView);
+			scope.$on('$stateChangeSuccess', update);
 
-			updateView();
+			update();
 
 			function cleanupLastView () {
 				if(previousLeaveAnimation) {
@@ -36,7 +36,7 @@ function $StViewDirective ($state, $animate, $interpolate) {
 				}
 			}
 
-			function updateView () {
+			function update () {
 				var viewName = getViewName(scope);
 				var locals = $state.current && $state.current.locals[viewName];
 				var template = locals && locals.$template;
@@ -63,34 +63,33 @@ function $StViewDirective ($state, $animate, $interpolate) {
           });
 
           currentElement = clone;
-          currentScope = current.scope = newScope;
+          currentScope = newScope;
           currentScope.$emit('$viewContentLoaded');
           currentScope.$eval(onloadExp);
-				} else {
-					cleanupLastView();
 				}
 			}
 		}
 	};
 }
 
-function $StViewFillDirective ($compile, $state, $controller) {
+function $StViewFillDirective ($compile, $state, $controller, $interpolate) {
 	return {
 		restrict: 'EA',
 		priority: -400,
 		link: function (scope, element, attrs) {
 			var current = $state.current;
-			var locals = current.locals;
-			console.log(current)
+			var getViewName = $interpolate(attrs.stView);
+			var viewName = getViewName(scope);
+			var locals = current.locals[viewName];
 
 			element.html(locals.$template);
 
 			var link = $compile(element.contents());
 
 			if(current.controller) {
-				// it is not a function for the
+				// it is not a function, for the
 				// locals are already been resolved
-				// at $state file
+				// at $state
 				locals.$scope = scope;
 
 				var controller = $controller(current.controller, locals);
