@@ -41,15 +41,10 @@ describe('state', function () {
 		bodyView = $compile(bodyView)($rootScope);
 	}));
 
-	afterEach(inject(function ($q, $timeout) {
-		$timeout.flush()
-	}))
-
-	it('should change the state', function () {
+	it('should change the state', inject(function ($timeout) {
 		$state.go('A');
-
 		$rootScope.$digest();
 
 		expect($state.current.name).toBe('A');
-	});
+	}));
 });

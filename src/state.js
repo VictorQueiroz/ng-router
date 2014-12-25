@@ -101,5 +101,5 @@ function $StateProvider () {
 	};
 }
 
-angular.module('ngRouter.state', [])
+angular.module('ngRouter.state', ['ngRouter.async'])
 	.provider('$state', $StateProvider);

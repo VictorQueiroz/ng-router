@@ -21,6 +21,9 @@ describe('view', function () {
 				views: {
 					'AView1': {
 						template: 'AView1 content!'
+					},
+					'AView2': {
+						template: 'AView2 content!'
 					}
 				}
 			});
@@ -42,11 +45,7 @@ describe('view', function () {
 		$rootScope.$digest();
 	}));
 
-	afterEach(inject(function ($timeout) {
-		$timeout.flush()
-	}))
-
-	it('should fill the view', inject(function ($animate, $timeout) {
+	it('should fill the view', inject(function ($timeout, $q) {
 		$state.go('A');
 		$rootScope.$digest();
 
@@ -57,7 +56,9 @@ describe('view', function () {
 		$rootScope.$digest();
 
 		var AView1 = angular.element(bodyView.children('[st-view]')[1]);
+		var AView2 = angular.element(bodyView.children('[st-view]')[2]);
 
 		expect(AView1.children('.ng-scope').text()).toBe('AView1 content!');
+		expect(AView2.children('.ng-scope').text()).toBe('AView2 content!');
 	}));
 });
