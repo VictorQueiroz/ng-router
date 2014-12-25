@@ -82,6 +82,7 @@ function $StViewFillDirective ($compile, $state, $controller, $interpolate) {
 			var viewName = getViewName(scope);
 			var locals = current.locals[viewName];
 
+			element.data('$stView', { state: current, name: viewName });
 			element.html(locals.$template);
 
 			var link = $compile(element.contents());

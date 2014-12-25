@@ -61,6 +61,7 @@ function $StateProvider () {
 			var promises = [];
 			var nextState = getState(stateName);
 
+			// resolving each view of the state
 			forEach(nextState.views, function (view, viewName) {
 				var viewLocals = locals[viewName] = angular.extend({}, view.resolve);
 
@@ -69,29 +70,21 @@ function $StateProvider () {
 				};
 
 				// resolving all the state dependencies and templates
-				$async.forEach(viewLocals, function (value, key) {
-					var next = this.next;
-					var promise = isString(value) ? $injector.get(value) : $injector.invoke(value, {}, viewLocals);
+				var promise = $async.resolve(viewLocals);
 
-					if(promise.then) {
-						return promises.push(promise.then(function (value) {
-							viewLocals[key] = value;
-
-							next();
-
-							return value;
-						}));
-					}
-
-					viewLocals[key] = promise;
-
-					next();
-				});
+				// pushing the promise to a variable to resolve later
+				// we don't need to manipulate the return value from the
+				// promise, for the $async.resolve already change the 'viewLocals' variable
+				// for us, with his resolved value
+				promises.push(promise);
 			});
 
 			$state.current = nextState;
 			$state.current.locals = locals;
 
+			// all the state dependencies
+			// has been solved, now tell to
+			// the views to render
 			$q.all(promises).then(function () {
 				$rootScope.$broadcast('$stateChangeSuccess');
 			});

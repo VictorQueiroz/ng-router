@@ -191,18 +191,31 @@ describe('async', function () {
 		expect(template).toBe($compile(parent)($scope));
 	}));
 
-	it('should resolve strings', function () {
-		var rootScopeAlias;
+	it('should resolve strings as services', function () {
+		var rootScopeAlias, resolved;
 
 		promise = $async.resolve({
-			'rootScopeAlias': '$rootScope'
+			'rootScopeAlias': '$rootScope',
+			'controllerAlias': '$controller',
+			promise: function ($q, $timeout) {
+				return $q(function (resolve) {
+					$timeout(function () {
+						$timeout(function () {
+							resolve(obj);
+						});
+					});
+				})
+			}
 		}).then(function (r) {
 			rootScopeAlias = r.rootScopeAlias;
+			resolved = r.promise;
 		})
 
 		$timeout.flush();
 		$rootScope.$digest();
 
 		expect(rootScopeAlias).toBe($rootScope);
+		expect(rootScopeAlias.$eval('1 + 2')).toBe(3);
+		expect(resolved).toBe(obj);
 	});
 });

@@ -1,5 +1,5 @@
 describe('state', function () {
-	var bodyView, $rootScope, $state;
+	var bodyView, $rootScope, $state, $timeout;
 
 	var appTemplate = 'App content!' +
 	'<div st-view="appView"></div>';
@@ -13,19 +13,7 @@ describe('state', function () {
 				views: {
 					'bodyView': {
 						template: appTemplate,
-						controller: AppController,
-						resolve: {
-							users: function ($q, $timeout) {
-								return $q(function (resolve) {
-									$timeout(function() {
-										resolve([{
-											id: 1,
-											name: 'Victor Queiroz'
-										}]);
-									}, 2000);
-								});
-							}
-						}
+						controller: AppController
 					}
 				}
 			});
@@ -34,6 +22,7 @@ describe('state', function () {
 	beforeEach(inject(function ($injector, $compile) {
 		$state = $injector.get('$state');
 		$rootScope = $injector.get('$rootScope');
+		$timeout = $injector.get('$timeout');
 
 		bodyView = angular.element('<div>');
 		bodyView.attr('st-view', 'bodyView');
@@ -41,8 +30,13 @@ describe('state', function () {
 		bodyView = $compile(bodyView)($rootScope);
 	}));
 
-	it('should change the state', inject(function ($timeout) {
+	afterEach(function () {
+		$timeout.verifyNoPendingTasks();
+	});
+
+	it('should change the state', inject(function () {
 		$state.go('A');
+		$timeout.flush();
 		$rootScope.$digest();
 
 		expect($state.current.name).toBe('A');
