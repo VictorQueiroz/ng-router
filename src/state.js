@@ -63,8 +63,14 @@ function $StateProvider () {
 		var $state = {};
 
 		$state.go = function (stateName) {
+			// Create a new variable to be filled with
+			// all the important values of each views.
 			var locals = {};
+
+			// All the promises which will be resolveds at the final of the loop.
 			var promises = [];
+
+			// The state which we're trying to reach.
 			var nextState = getState(stateName);
 
 			// resolving each view of the state.
@@ -116,20 +122,24 @@ function $StateProvider () {
 				}
 
 				// The 'templateUrl' option is just a wrapper to generate
-				// a 'template' local, to be resolved at the final of the promises.
+				// a 'template' local using $http ant the template url path, to be resolved
+				// at the final of the promises.
 				if(isDefined(view.templateUrl)) {
 					var $templateUrl = view.templateUrl;
 
+					// Create a new local for stetic purposes.
 					viewLocals.$templateUrl = function () {
 						return $templateUrl;
 					}
 
+					// The most important local, which will be loaded by the view later.
 					viewLocals.$template = function ($templateUrl, $templateCache, $http) {
-						return $q.when(($templateCache.get($templateUrl) |
-							$http.get($templateUrl)))
-								.then(function (r) {
-									return (r.data || r);
-								});
+						// If we don't find the templateUrl at the $templateCache,
+						// go make a http request trying to find our template.
+						return $q.when(($templateCache.get($templateUrl) ||	$http.get($templateUrl)))
+							.then(function (r) {
+								return (r.data || r);
+							});
 					};
 				}
 

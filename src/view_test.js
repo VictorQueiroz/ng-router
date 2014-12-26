@@ -42,12 +42,23 @@ describe('view', function () {
 
 	it('should render the view', function () {
 		bodyView = $compile('<div><div st-view="bodyView"></div></div>')($rootScope);
-		$rootScope.$digest();
 
 		$state.go('a');
 		$timeout.flush();
-		$rootScope.$digest();
+		// $rootScope.$digest();
 
 		expect(bodyView[0].querySelector('[st-view="bodyView"] .ng-scope').innerHTML).toBe('Body content!');
 	});
+
+	it('shoud render $templateCache templates', inject(function ($templateCache) {
+		var template = '<div>' +
+			'<input value="{{ inputValue }}" id="my-input">'
+		'</div>';
+
+		$templateCache.put('/my-template.html', template);
+
+		$state.go('b');
+		$timeout.flush();
+		// $rootScope.$digest();	
+	}));
 });
