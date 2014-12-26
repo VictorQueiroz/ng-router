@@ -32,13 +32,19 @@ function $StateProvider () {
 	};
 
 	function getState (stateName) {
-		return states[stateName];
+		if(hasState(stateName)) {
+			return states[stateName];
+		}
+	}
+
+	function hasState (stateName) {
+		return states.hasOwnProperty(stateName);
 	}
 
 	// define a new state
 	this.state = function (stateName, stateOptions) {
 		// if the state already exists, throw a new error
-		if(isDefined(states[stateName])) {
+		if(hasState(stateName)) {
 			throw new Error('The state ' + stateName + ' are already defined!');
 		}
 
@@ -61,21 +67,78 @@ function $StateProvider () {
 			var promises = [];
 			var nextState = getState(stateName);
 
-			// resolving each view of the state
+			// resolving each view of the state.
 			forEach(nextState.views, function (view, viewName) {
 				var viewLocals = locals[viewName] = angular.extend({}, view.resolve);
 
-				viewLocals.$template = function () {
-					return view.template;
-				};
+				// Defining the three view param there are not part of the resolve,
+				// but sometimes need to be resolved. Example:
+				// ```
+				//   $stateProvider
+				//     .state('a', {
+				//		   views: {
+				//         template: function () { return $http.get('/get-template.html').then(function (r) { return r.data; }) },
+				//         controller: function ($http) {
+				//           return $http.get('/api/get-controller').then(function (r) {
+				//             return JSON.parse(r.data);
+				//           });
+				//         }
+				//       }
+				//		 })
+				// ```
+				forEach(['controller', 'controllerAs', 'template'], function (key) {
+					var newKey = isString(key) && key.indexOf('$') <= -1 ? '$' + key : key;
+					var value = view[key];
 
-				// resolving all the state dependencies and templates
+					// The result of each key will be '$KeyName'. Example:
+					// - 'controller' will be '$controller'
+					// - 'template' will be '$template'					
+					if(!isDefined(value)) {
+						return;
+					}
+
+					if(isString(value) || (isFunction(value) && key === 'controller')) {
+						viewLocals[newKey] = function () {
+							return value;
+						};
+					}
+
+					if(isFunction(value) && key !== 'controller') {
+						viewLocals[newKey] = value;
+					}
+				});
+
+				// You cannot define two template options, you must choose, between
+				// the 'template' option, and the 'templateUrl' option.
+				if(isDefined(view.templateUrl) && isDefined(viewLocals.$template)) {
+					throw new Error('You cannot define two template options, you must choose, ' +
+						'between the \'template\' option, and the \'templateUrl\' option.');
+				}
+
+				// The 'templateUrl' option is just a wrapper to generate
+				// a 'template' local, to be resolved at the final of the promises.
+				if(isDefined(view.templateUrl)) {
+					var $templateUrl = view.templateUrl;
+
+					viewLocals.$templateUrl = function () {
+						return $templateUrl;
+					}
+
+					viewLocals.$template = function ($templateUrl, $templateCache, $http) {
+						return $q.when(($templateCache.get($templateUrl) |
+							$http.get($templateUrl)))
+								.then(function (r) {
+									return (r.data || r);
+								});
+					};
+				}
+
+				// Resolving all the state dependencies and templates.
 				var promise = $async.resolve(viewLocals);
 
-				// pushing the promise to a variable to resolve later
-				// we don't need to manipulate the return value from the
-				// promise, for the $async.resolve already change the 'viewLocals' variable
-				// for us, with his resolved value
+				// Pushing the promise to a variable to resolve later, we don't need to manipulate
+				// the return value from the promise, for the $async.resolve already change the
+				// 'viewLocals' variable for us, with his resolved value.
 				promises.push(promise);
 			});
 

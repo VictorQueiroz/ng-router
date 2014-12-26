@@ -33,11 +33,29 @@ describe('async', function () {
 	}));
 
 	it('should be a promise', function () {
+		promise = $async.forEach(obj, function (value, key) {
+			index = this.index;
+
+			expect(obj[key]).toBeDefined();
+			expect(obj[key]).toBe(value);
+
+			this.next();
+		});
+
 		expect(promise.then).toBeDefined();
 		expect(promise.catch).toBeDefined();
 	});
 
 	it('should reach to the last object', function () {
+		promise = $async.forEach(obj, function (value, key) {
+			index = this.index;
+
+			expect(obj[key]).toBeDefined();
+			expect(obj[key]).toBe(value);
+
+			this.next();
+		});
+		
 		expect(index).toBe(2);
 	});
 

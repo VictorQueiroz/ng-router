@@ -45,9 +45,9 @@ function $StViewDirective ($state, $animate, $interpolate) {
 					var newScope = scope.$new();
 					var current = $state.current;
 
-					// Note: This will also link all children of ng-view that were contained in the original
+					// Note: This will also link all children of st-view that were contained in the original
           // html. If that content contains controllers, ... they could pollute/change the scope.
-          // However, using ng-view on an element with additional content does not make sense...
+          // However, using st-view on an element with additional content does not make sense...
           // Note: We can't remove them in the cloneAttchFn of $transclude as that
           // function is called before linking the content, which would apply child
           // directives to non existing elements.
@@ -87,18 +87,18 @@ function $StViewFillDirective ($compile, $state, $controller, $interpolate) {
 
 			var link = $compile(element.contents());
 
-			if(current.controller) {
+			if(locals.$controller) {
 				// it is not a function, for the
 				// locals are already been resolved
 				// at $state
 				locals.$scope = scope;
 
-				var controller = $controller(current.controller, locals);
+				var controller = $controller(locals.$controller, locals);
 
 				// define the controllerAs syntax if the
 				// view has this option
-				if(current.controllerAs) {
-					scope[current.controllerAs] = controller;
+				if(locals.$controllerAs) {
+					scope[locals.$controllerAs] = controller;
 				}
 
 				element.data('$ngControllerController', controller);

@@ -1,64 +1,53 @@
 describe('view', function () {
-	var $rootScope, $state, body, bodyView;
+	var $rootScope, $timeout, $state, $compile, $httpBackend, bodyView;
 
 	beforeEach(module('ngRouter', function ($stateProvider) {
 		$stateProvider
-			.state('A', {
-				url: '/A',
+			.state('a', {
+				url: '/a',
 				views: {
 					'bodyView': {
-						template: 'bodyView content!' +
-						'<div st-view="AView1"></div>' +
-						'<div st-view="AView2"></div>',
+						template: '{{ content }}',
 						controller: function ($scope) {
-							console.log($scope)
+							$scope.content = 'Body content!';
 						}
 					}
 				}
 			})
-			.state('A.B', {
-				url: '/B',
+			.state('b', {
+				url: '/b',
 				views: {
-					'AView1': {
-						template: 'AView1 content!'
-					},
-					'AView2': {
-						template: 'AView2 content!'
+					'bodyView': {
+						templateUrl: '/my-template.html',
+						controller: function ($scope) {
+						}
 					}
 				}
-			});
+			})
 	}));
 
-	beforeEach(inject(function ($injector, $compile) {
+	beforeEach(inject(function ($injector, $templateCache) {
 		$rootScope = $injector.get('$rootScope');
+		$httpBackend = $injector.get('$httpBackend');
+		$timeout = $injector.get('$timeout');
 		$state = $injector.get('$state');
-
-		body = angular.element('<div>');
-
-		bodyView = angular.element('<div>');
-		bodyView.attr('st-view', 'bodyView');
-
-		body.append(bodyView);
-
-		$compile(body)($rootScope);
-
-		$rootScope.$digest();
+		$compile = $injector.get('$compile');
 	}));
 
-	it('should fill the view', inject(function ($timeout, $q) {
-		$state.go('A');
+	afterEach(function () {
+		$timeout.verifyNoPendingTasks();
+		$httpBackend.verifyNoOutstandingExpectation();
+    $httpBackend.verifyNoOutstandingRequest();
+	});
+
+	it('should render the view', function () {
+		bodyView = $compile('<div><div st-view="bodyView"></div></div>')($rootScope);
 		$rootScope.$digest();
 
-		bodyView = body.children('[st-view*="bodyView"]');
-		expect(bodyView.text()).toBe('bodyView content!');
-
-		$state.go('A.B');
+		$state.go('a');
+		$timeout.flush();
 		$rootScope.$digest();
 
-		var AView1 = angular.element(bodyView.children('[st-view]')[1]);
-		var AView2 = angular.element(bodyView.children('[st-view]')[2]);
-
-		expect(AView1.children('.ng-scope').text()).toBe('AView1 content!');
-		expect(AView2.children('.ng-scope').text()).toBe('AView2 content!');
-	}));
+		expect(bodyView[0].querySelector('[st-view="bodyView"] .ng-scope').innerHTML).toBe('Body content!');
+	});
 });
