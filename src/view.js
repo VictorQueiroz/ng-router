@@ -39,9 +39,9 @@ function $StViewDirective ($state, $animate, $interpolate) {
 			function update () {
 				var viewName = getViewName(scope);
 				var locals = $state.current && $state.current.locals[viewName];
-				var template = locals && locals.$template;
+				var $template = locals && locals.$template;
 
-				if(isDefined(template)) {
+				if(isDefined($template)) {
 					var newScope = scope.$new();
 					var current = $state.current;
 
@@ -82,7 +82,6 @@ function $StViewFillDirective ($compile, $state, $controller, $interpolate) {
 			var viewName = getViewName(scope);
 			var locals = current.locals[viewName];
 
-			element.data('$stView', { state: current, name: viewName });
 			element.html(locals.$template);
 
 			var link = $compile(element.contents());

@@ -9,6 +9,10 @@ angular.module('ngRouter.async', [])
 
 			$async.resolve = resolve;
 
+			// resolves an object with dependencies
+			// invoke each key value with $injector
+			// solves all the promises queued and then
+			// resolve the resolve function promise
 			function resolve (obj, locals) {
 				var promises = [];
 				var deferred = $q.defer();
@@ -22,6 +26,9 @@ angular.module('ngRouter.async', [])
 					var next = this.next;
 					var promise = isString(value) ? $injector.get(value) : $injector.invoke(value, {}, obj);
 
+					// if is a promise, add it to the promises variable
+					// to be solved later and only return when, all promises
+					// got resolved
 					if(promise && promise.then) {
 						return promises.push(promise.then(function (value) {
 							obj[key] = value;
@@ -129,6 +136,7 @@ var forEach = angular.forEach;
 var isDefined = angular.isDefined;
 var isObject = angular.isObject;
 var isString = angular.isString;
+var isFunction = angular.isFunction;
 
 angular.module('ngRouter', [
 	'ng',
@@ -168,14 +176,55 @@ function $StateProvider () {
 		this.parent = states[stateName];
 	};
 
+	State.prototype.getParents = function () {
+		return getParents(this.name);
+	};
+
+	function getParents (stateName) {
+		var parents = [];
+
+		// Split the name of the state into all dots.
+		stateName.split(/\./).forEach(function (key, index, array) {
+		  var state;
+
+		  if(index === 0) {
+		    state = key;
+		  }
+
+			if(index > 0) {
+			  state = array[0];
+
+			  state += '.';
+
+			  array.slice(1, index + 1).forEach(function (key, index, array) {
+			    state += key;
+
+			    if(index < array.length - 1) {
+			      state += '.';
+			    }
+			  })
+			}
+
+		  parents.push(state)
+		});
+
+		return parents;
+	}
+
 	function getState (stateName) {
-		return states[stateName];
+		if(hasState(stateName)) {
+			return states[stateName];
+		}
+	}
+
+	function hasState (stateName) {
+		return states.hasOwnProperty(stateName);
 	}
 
 	// define a new state
 	this.state = function (stateName, stateOptions) {
 		// if the state already exists, throw a new error
-		if(isDefined(states[stateName])) {
+		if(hasState(stateName)) {
 			throw new Error('The state ' + stateName + ' are already defined!');
 		}
 
@@ -194,45 +243,144 @@ function $StateProvider () {
 		var $state = {};
 
 		$state.go = function (stateName) {
-			var locals = {};
-			var promises = [];
-			var nextState = getState(stateName);
+			var state = getState(stateName);
+			var parents = state.getParents();
 
-			forEach(nextState.views, function (view, viewName) {
-				var viewLocals = locals[viewName] = angular.extend({}, view.resolve);
+			all(parents).then(function (resolvedStates) {
+				console.log(resolvedStates);
+				
+				resolvedStates.forEach(function (current) {
+					$state.current = current;
 
-				viewLocals.$template = function () {
-					return view.template;
-				};
-
-				// resolving all the state dependencies and templates
-				$async.forEach(viewLocals, function (value, key) {
-					var next = this.next;
-					var promise = isString(value) ? $injector.get(value) : $injector.invoke(value, {}, viewLocals);
-
-					if(promise.then) {
-						return promises.push(promise.then(function (value) {
-							viewLocals[key] = value;
-
-							next();
-
-							return value;
-						}));
-					}
-
-					viewLocals[key] = promise;
-
-					next();
+					$rootScope.$broadcast('$stateChangeSuccess');
 				});
 			});
-
-			$state.current = nextState;
-			$state.current.locals = locals;
-
-			$q.all(promises).then(function () {
-				$rootScope.$broadcast('$stateChangeSuccess');
-			});
 		};
+
+		$state.prepare = prepare;
+
+		// Resolves a bunch of states and return as a promise.
+		function all (states) {
+			forEach(states, function (stateName, key) {
+				if(!isString(stateName)) {
+					throw new Error('The state name should be a string.');
+				}
+
+				states[key] = prepare(stateName);
+			});
+
+			return $q.all(states);
+		}
+
+		// Resolves all the dependencies of a state, and return it in a promise.
+		function prepare (stateName) {
+			// Create a new variable to be filled with
+			// all the important values of each views.
+			var locals = {};
+
+			// All the promises which will be resolveds at the final of the loop.
+			var promises = [];
+
+			// The state which we're trying to reach.
+			var nextState = getState(stateName);
+
+			if(!isDefined(nextState)) {
+				throw new Error('There is not state named ' + stateName);
+			}
+
+			// resolving each view of the state.
+			forEach(nextState.views, function (view, viewName) {
+				var viewLocals = locals[viewName] = {};
+
+				// Throw all that we have in the view resolve object into the locals
+				// to be resolved and used to the view when everything is ready to use.
+				angular.extend(viewLocals, view.resolve);
+
+				// Defining the three view param there are not part of the resolve,
+				// but sometimes need to be resolved. Example:
+				// ```
+				//   $stateProvider
+				//     .state('a', {
+				//		   views: {
+				//         template: function () { return $http.get('/get-template.html').then(function (r) { return r.data; }) },
+				//         controller: function ($http) {
+				//           return $http.get('/api/get-controller').then(function (r) {
+				//             return JSON.parse(r.data);
+				//           });
+				//         }
+				//       }
+				//		 })
+				// ```
+				forEach(['controller', 'controllerAs', 'template'], function (key) {
+					var newKey = isString(key) && key.indexOf('$') <= -1 ? '$' + key : key;
+					var value = view[key];
+
+					// The result of each key will be '$KeyName'. Example:
+					// - 'controller' will be '$controller'
+					// - 'template' will be '$template'					
+					if(!isDefined(value)) {
+						return;
+					}
+
+					if(isString(value) || (isFunction(value) && key === 'controller')) {
+						viewLocals[newKey] = function () {
+							return value;
+						};
+					}
+
+					if(isFunction(value) && key !== 'controller') {
+						viewLocals[newKey] = value;
+					}
+				});
+
+				// You cannot define two template options, you must choose, between
+				// the 'template' option, and the 'templateUrl' option.
+				if(isDefined(view.templateUrl) && isDefined(viewLocals.$template)) {
+					throw new Error('You cannot define two template options, you must choose, ' +
+						'between the \'template\' option, and the \'templateUrl\' option.');
+				}
+
+				// The 'templateUrl' option is just a wrapper to generate
+				// a 'template' local using $http ant the template url path, to be resolved
+				// at the final of the promises.
+				if(isDefined(view.templateUrl)) {
+					var $templateUrl = view.templateUrl;
+
+					// Create a new local for stetic purposes.
+					viewLocals.$templateUrl = function () {
+						return $templateUrl;
+					}
+
+					// The most important local, which will be loaded by the view later.
+					viewLocals.$template = function ($templateUrl, $templateCache, $http) {
+						// If we don't find the templateUrl at the $templateCache,
+						// go make a http request trying to find our template.
+						return $q.when(($templateCache.get($templateUrl) ||	$http.get($templateUrl)))
+							.then(function (r) {
+								return (r.data || r);
+							});
+					};
+				}
+
+				// Resolving all the state dependencies and templates.
+				var promise = $async.resolve(viewLocals);
+
+				// Pushing the promise to a variable to resolve later, we don't need to manipulate
+				// the return value from the promise, for the $async.resolve already change the
+				// 'viewLocals' variable for us, with his resolved value.
+				promises.push(promise);
+			});
+
+			var current = nextState;
+			current.locals = locals;
+
+			// all the state dependencies
+			// has been solved, now tell to
+			// the views to render
+			return $q.all(promises).then(function () {
+				return current;
+			});
+		}
 
 		return $state;
 	};
@@ -240,6 +388,25 @@ function $StateProvider () {
 
 angular.module('ngRouter.state', ['ngRouter.async'])
 	.provider('$state', $StateProvider);
+'use strict';
+
+var STATE_PARAMS_REGEXP = /(?:[\:\{])([A-z]{0,})(?:[\}]|)/g;
+
+function matchParams (url) {
+	if(!isString(url)) {
+		throw new Error('The url must be a string.');
+	}
+
+	return STATE_PARAMS_REGEXP.exec(url);
+}	
+
+function $UrlProvider () {
+	this.$get = function $UrlFactory () {
+	};
+}
+
+angular.module('ngRouter.url', [])
+	.provider('$url', $UrlProvider)
 function $StViewDirective ($state, $animate, $interpolate) {
 	return {
 		terminal: true,
@@ -281,15 +448,15 @@ function $StViewDirective ($state, $animate, $interpolate) {
 			function update () {
 				var viewName = getViewName(scope);
 				var locals = $state.current && $state.current.locals[viewName];
-				var template = locals && locals.$template;
+				var $template = locals && locals.$template;
 
-				if(isDefined(template)) {
+				if(isDefined($template)) {
 					var newScope = scope.$new();
 					var current = $state.current;
 
-					// Note: This will also link all children of ng-view that were contained in the original
+					// Note: This will also link all children of st-view that were contained in the original
           // html. If that content contains controllers, ... they could pollute/change the scope.
-          // However, using ng-view on an element with additional content does not make sense...
+          // However, using st-view on an element with additional content does not make sense...
           // Note: We can't remove them in the cloneAttchFn of $transclude as that
           // function is called before linking the content, which would apply child
           // directives to non existing elements.
@@ -328,18 +495,18 @@ function $StViewFillDirective ($compile, $state, $controller, $interpolate) {
 
 			var link = $compile(element.contents());
 
-			if(current.controller) {
+			if(locals.$controller) {
 				// it is not a function, for the
 				// locals are already been resolved
 				// at $state
 				locals.$scope = scope;
 
-				var controller = $controller(current.controller, locals);
+				var controller = $controller(locals.$controller, locals);
 
 				// define the controllerAs syntax if the
 				// view has this option
-				if(current.controllerAs) {
-					scope[current.controllerAs] = controller;
+				if(locals.$controllerAs) {
+					scope[locals.$controllerAs] = controller;
 				}
 
 				element.data('$ngControllerController', controller);

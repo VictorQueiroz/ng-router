@@ -20,13 +20,14 @@ describe('view', function () {
 					'bodyView': {
 						templateUrl: '/my-template.html',
 						controller: function ($scope) {
+							$scope.inputValue = 'That is my value!';
 						}
 					}
 				}
 			})
 	}));
 
-	beforeEach(inject(function ($injector, $templateCache) {
+	beforeEach(inject(function ($injector) {
 		$rootScope = $injector.get('$rootScope');
 		$httpBackend = $injector.get('$httpBackend');
 		$timeout = $injector.get('$timeout');
@@ -43,22 +44,30 @@ describe('view', function () {
 	it('should render the view', function () {
 		bodyView = $compile('<div><div st-view="bodyView"></div></div>')($rootScope);
 
-		$state.go('a');
-		$timeout.flush();
-		// $rootScope.$digest();
+		$rootScope.$apply(function () {
+			$state.go('a');
+		});
 
 		expect(bodyView[0].querySelector('[st-view="bodyView"] .ng-scope').innerHTML).toBe('Body content!');
 	});
 
 	it('shoud render $templateCache templates', inject(function ($templateCache) {
+		bodyView = $compile('<div><div st-view="bodyView"></div></div>')($rootScope);
+
 		var template = '<div>' +
-			'<input value="{{ inputValue }}" id="my-input">'
+			'<input value="{{ inputValue }}" id="my-input">' +
+			'<div ng-include src="\'/my-other-template.html\'" id="my-other-template"></div>'
 		'</div>';
 
 		$templateCache.put('/my-template.html', template);
+		$templateCache.put('/my-other-template.html', 'Bitch!');
 
-		$state.go('b');
-		$timeout.flush();
-		// $rootScope.$digest();	
+		$rootScope.$apply(function () {
+			$state.go('b');
+		});
+
+		expect($state.current.name).toBe('b');
+		expect(bodyView[0].querySelector('#my-input').value).toBe('That is my value!');
+		expect(bodyView[0].querySelector('#my-other-template .ng-scope').innerHTML).toBe('Bitch!');
 	}));
 });

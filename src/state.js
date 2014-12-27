@@ -31,6 +31,41 @@ function $StateProvider () {
 		this.parent = states[stateName];
 	};
 
+	State.prototype.getParents = function () {
+		return getParents(this.name);
+	};
+
+	function getParents (stateName) {
+		var parents = [];
+
+		// Split the name of the state into all dots.
+		stateName.split(/\./).forEach(function (key, index, array) {
+		  var state;
+
+		  if(index === 0) {
+		    state = key;
+		  }
+
+			if(index > 0) {
+			  state = array[0];
+
+			  state += '.';
+
+			  array.slice(1, index + 1).forEach(function (key, index, array) {
+			    state += key;
+
+			    if(index < array.length - 1) {
+			      state += '.';
+			    }
+			  })
+			}
+
+		  parents.push(state)
+		});
+
+		return parents;
+	}
+
 	function getState (stateName) {
 		if(hasState(stateName)) {
 			return states[stateName];
@@ -63,6 +98,35 @@ function $StateProvider () {
 		var $state = {};
 
 		$state.go = function (stateName) {
+			var state = getState(stateName);
+			var parents = state.getParents();
+
+			all(parents).then(function (states) {
+				states.forEach(function (current) {
+					$state.current = current;
+
+					$rootScope.$broadcast('$stateChangeSuccess');
+				});
+			});
+		};
+
+		$state.prepare = prepare;
+
+		// Resolves a bunch of states and return as a promise.
+		function all (states) {
+			forEach(states, function (stateName, key) {
+				if(!isString(stateName)) {
+					throw new Error('The state name should be a string.');
+				}
+
+				states[key] = prepare(stateName);
+			});
+
+			return $q.all(states);
+		}
+
+		// Resolves all the dependencies of a state, and return it in a promise.
+		function prepare (stateName) {
 			// Create a new variable to be filled with
 			// all the important values of each views.
 			var locals = {};
@@ -73,9 +137,17 @@ function $StateProvider () {
 			// The state which we're trying to reach.
 			var nextState = getState(stateName);
 
+			if(!isDefined(nextState)) {
+				throw new Error('There is not state named ' + stateName);
+			}
+
 			// resolving each view of the state.
 			forEach(nextState.views, function (view, viewName) {
-				var viewLocals = locals[viewName] = angular.extend({}, view.resolve);
+				var viewLocals = locals[viewName] = {};
+
+				// Throw all that we have in the view resolve object into the locals
+				// to be resolved and used to the view when everything is ready to use.
+				angular.extend(viewLocals, view.resolve);
 
 				// Defining the three view param there are not part of the resolve,
 				// but sometimes need to be resolved. Example:
@@ -152,16 +224,16 @@ function $StateProvider () {
 				promises.push(promise);
 			});
 
-			$state.current = nextState;
-			$state.current.locals = locals;
+			var current = nextState;
+			current.locals = locals;
 
 			// all the state dependencies
 			// has been solved, now tell to
 			// the views to render
-			$q.all(promises).then(function () {
-				$rootScope.$broadcast('$stateChangeSuccess');
+			return $q.all(promises).then(function () {
+				return current;
 			});
-		};
+		}
 
 		return $state;
 	};
