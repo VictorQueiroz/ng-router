@@ -12,7 +12,7 @@ function $StViewDirective ($state, $animate, $interpolate) {
 			var currentElement;
 			var previousLeaveAnimation;
 
-			scope.$on('$stateChangeSuccess', update);
+			scope.$on('$viewContentLoading', update);
 
 			update();
 

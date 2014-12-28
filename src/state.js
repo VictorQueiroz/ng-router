@@ -35,6 +35,10 @@ function $StateProvider () {
 		return getParents(this.name);
 	};
 
+	State.prototype.getPath = function () {
+		return getPath(this.name);
+	};
+
 	function getParents (stateName) {
 		var parents = [];
 
@@ -60,7 +64,7 @@ function $StateProvider () {
 			  })
 			}
 
-		  parents.push(state)
+		  parents.push(state);
 		});
 
 		return parents;
@@ -76,11 +80,30 @@ function $StateProvider () {
 		return states.hasOwnProperty(stateName);
 	}
 
+	// Get the entire state url from the given
+	// state to the of it's parents.
+	function getPath (stateName) {
+		var path = '';
+		var state = getState(stateName);
+
+		getParents(state.name).forEach(function (stateName) {
+			var parent = getState(stateName);
+
+			path += parent.url;
+		});
+
+		return path;
+	}
+
 	// define a new state
 	this.state = function (stateName, stateOptions) {
 		// if the state already exists, throw a new error
 		if(hasState(stateName)) {
 			throw new Error('The state ' + stateName + ' are already defined!');
+		}
+
+		if(!isDefined(stateOptions.url)) {
+			throw new Error('The state must have an url');
 		}
 
 		var state = states[stateName] = new State(stateName, stateOptions);
@@ -94,19 +117,28 @@ function $StateProvider () {
 		return this;
 	};
 
-	this.$get = function $StateFactory ($rootScope, $injector, $q, $async) {
+	this.$get = function $StateFactory ($rootScope, $injector, $q, $async, $url, $location) {
 		var $state = {};
 
-		$state.go = function (stateName) {
+		$state.go = function (stateName, stateParams) {
+			var path;
 			var state = getState(stateName);
 			var parents = state.getParents();
 
-			all(parents).then(function (states) {
+			// Translate the parsed 'stateParams' to the new url
+			// which will be changed using $location.path by the
+			// $urlProvider.
+			path = state.getPath();
+			path = $url.params(path, stateParams);
+
+			return all(parents, stateParams).then(function (states) {
 				states.forEach(function (current) {
 					$state.current = current;
 
-					$rootScope.$broadcast('$stateChangeSuccess');
+					$rootScope.$broadcast('$viewContentLoading');
 				});
+
+				$url.go(path, stateParams);
 			});
 		};
 
@@ -119,14 +151,16 @@ function $StateProvider () {
 					throw new Error('The state name should be a string.');
 				}
 
-				states[key] = prepare(stateName);
+				var state = getState(stateName);
+
+				states[key] = prepare(state.name);
 			});
 
 			return $q.all(states);
 		}
 
 		// Resolves all the dependencies of a state, and return it in a promise.
-		function prepare (stateName) {
+		function prepare (stateName, options) {
 			// Create a new variable to be filled with
 			// all the important values of each views.
 			var locals = {};
@@ -141,13 +175,23 @@ function $StateProvider () {
 				throw new Error('There is not state named ' + stateName);
 			}
 
+			if(!isDefined(options)) {
+				options = {
+					locals: {}
+				};
+			}
+
+			if(isObject(options.locals)) {
+				extend(locals, options.locals);
+			}
+
 			// resolving each view of the state.
 			forEach(nextState.views, function (view, viewName) {
 				var viewLocals = locals[viewName] = {};
 
 				// Throw all that we have in the view resolve object into the locals
 				// to be resolved and used to the view when everything is ready to use.
-				angular.extend(viewLocals, view.resolve);
+				extend(viewLocals, view.resolve);
 
 				// Defining the three view param there are not part of the resolve,
 				// but sometimes need to be resolved. Example:
@@ -175,14 +219,14 @@ function $StateProvider () {
 						return;
 					}
 
-					if(isString(value) || (isFunction(value) && key === 'controller')) {
+					if(isFunction(value) && newKey !== '$controller') {
+						viewLocals[newKey] = value;
+					}
+
+					if(isString(value) || (isFunction(value) && newKey === '$controller')) {
 						viewLocals[newKey] = function () {
 							return value;
 						};
-					}
-
-					if(isFunction(value) && key !== 'controller') {
-						viewLocals[newKey] = value;
 					}
 				});
 
@@ -210,6 +254,9 @@ function $StateProvider () {
 						// go make a http request trying to find our template.
 						return $q.when(($templateCache.get($templateUrl) ||	$http.get($templateUrl)))
 							.then(function (r) {
+								// Must save this template in $templateCache for future use.
+								$templateCache.put($templateUrl, r.data);
+
 								return (r.data || r);
 							});
 					};
@@ -227,9 +274,10 @@ function $StateProvider () {
 			var current = nextState;
 			current.locals = locals;
 
-			// all the state dependencies
-			// has been solved, now tell to
-			// the views to render
+			// All the state dependencies
+			// has been solved, now return
+			// a promise with this data, which
+			// can be used by any 'stView' directive
 			return $q.all(promises).then(function () {
 				return current;
 			});
@@ -239,5 +287,6 @@ function $StateProvider () {
 	};
 }
 
-angular.module('ngRouter.state', ['ngRouter.async'])
+angular.module('ngRouter.state', ['ngRouter.async', 'ngRouter.url'])
+	.value('$stateParams', {})
 	.provider('$state', $StateProvider);

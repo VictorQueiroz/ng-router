@@ -25,6 +25,26 @@ describe('view', function () {
 					}
 				}
 			})
+			.state('c', {
+				url: '/c',
+				views: {
+					'bodyView': {
+						template: '<div st-view="cview1"></div>' +
+						'<div st-view="cview2"></div>'
+					}
+				}
+			})
+			.state('c.a', {
+				url: '/a',
+				views: {
+					'cview1': {
+						template: 'My template here!'
+					},
+					'cview2': {
+						template: 'My template here too!'
+					}
+				}
+			})
 	}));
 
 	beforeEach(inject(function ($injector) {
@@ -69,5 +89,13 @@ describe('view', function () {
 		expect($state.current.name).toBe('b');
 		expect(bodyView[0].querySelector('#my-input').value).toBe('That is my value!');
 		expect(bodyView[0].querySelector('#my-other-template .ng-scope').innerHTML).toBe('Bitch!');
+	}));
+
+	it('should two templates at the same time', inject(function () {
+		bodyView = $compile('<div><div st-view="bodyView"></div></div>')($rootScope);
+
+		$rootScope.$apply(function () {
+			$state.go('c.a');
+		});
 	}));
 });

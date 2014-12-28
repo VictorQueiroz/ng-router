@@ -9,10 +9,10 @@ angular.module('ngRouter.async', [])
 
 			$async.resolve = resolve;
 
-			// resolves an object with dependencies
+			// Resolves an object with dependencies
 			// invoke each key value with $injector
 			// solves all the promises queued and then
-			// resolve the resolve function promise
+			// resolve the resolve function promise.
 			function resolve (obj, locals) {
 				var promises = [];
 				var deferred = $q.defer();
@@ -26,9 +26,9 @@ angular.module('ngRouter.async', [])
 					var next = this.next;
 					var promise = isString(value) ? $injector.get(value) : $injector.invoke(value, {}, obj);
 
-					// if is a promise, add it to the promises variable
+					// If is a promise, add it to the promises variable
 					// to be solved later and only return when, all promises
-					// got resolved
+					// got resolved.
 					if(promise && promise.then) {
 						return promises.push(promise.then(function (value) {
 							obj[key] = value;
@@ -41,12 +41,11 @@ angular.module('ngRouter.async', [])
 
 					next();
 				})
-				// only resolve all the promises
-				// atached by the invokes/instantiates
-				// after the $async.forEach
-				// finishes the loop
+				// Only resolve all the promises
+				// attached by the invokes/instantiates
+				// after the $async.forEach finishes the loop.
 				.then(function () {
-					// resolve all the queued promises
+					// Resolve all the queued promises
 					// atached by the invokes/instantiates
 					$q.all(promises).then(function () {
 						deferred.resolve(obj);
@@ -137,11 +136,14 @@ var isDefined = angular.isDefined;
 var isObject = angular.isObject;
 var isString = angular.isString;
 var isFunction = angular.isFunction;
+var extend = angular.extend;
+var copy = angular.copy;
 
 angular.module('ngRouter', [
 	'ng',
 	'ngRouter.state',
-	'ngRouter.view'
+	'ngRouter.view',
+	'ngRouter.url'
 ]);
 'use strict';
 
@@ -180,6 +182,10 @@ function $StateProvider () {
 		return getParents(this.name);
 	};
 
+	State.prototype.getPath = function () {
+		return getPath(this.name);
+	};
+
 	function getParents (stateName) {
 		var parents = [];
 
@@ -205,7 +211,7 @@ function $StateProvider () {
 			  })
 			}
 
-		  parents.push(state)
+		  parents.push(state);
 		});
 
 		return parents;
@@ -221,11 +227,30 @@ function $StateProvider () {
 		return states.hasOwnProperty(stateName);
 	}
 
+	// Get the entire state url from the given
+	// state to the of it's parents.
+	function getPath (stateName) {
+		var path = '';
+		var state = getState(stateName);
+
+		getParents(state.name).forEach(function (stateName) {
+			var parent = getState(stateName);
+
+			path += parent.url;
+		});
+
+		return path;
+	}
+
 	// define a new state
 	this.state = function (stateName, stateOptions) {
 		// if the state already exists, throw a new error
 		if(hasState(stateName)) {
 			throw new Error('The state ' + stateName + ' are already defined!');
+		}
+
+		if(!isDefined(stateOptions.url)) {
+			throw new Error('The state must have an url');
 		}
 
 		var state = states[stateName] = new State(stateName, stateOptions);
@@ -239,21 +264,28 @@ function $StateProvider () {
 		return this;
 	};
 
-	this.$get = function $StateFactory ($rootScope, $injector, $q, $async) {
+	this.$get = function $StateFactory ($rootScope, $injector, $q, $async, $url, $location) {
 		var $state = {};
 
-		$state.go = function (stateName) {
+		$state.go = function (stateName, stateParams) {
+			var path;
 			var state = getState(stateName);
 			var parents = state.getParents();
 
-			all(parents).then(function (resolvedStates) {
-				console.log(resolvedStates);
-				
-				resolvedStates.forEach(function (current) {
+			// Translate the parsed 'stateParams' to the new url
+			// which will be changed using $location.path by the
+			// $urlProvider.
+			path = state.getPath();
+			path = $url.params(path, stateParams);
+
+			return all(parents).then(function (states) {
+				states.forEach(function (current) {
 					$state.current = current;
 
-					$rootScope.$broadcast('$stateChangeSuccess');
+					$rootScope.$broadcast('$viewContentLoading');
 				});
+			}).finally(function () {
+				$url.go(path);
 			});
 		};
 
@@ -266,14 +298,16 @@ function $StateProvider () {
 					throw new Error('The state name should be a string.');
 				}
 
-				states[key] = prepare(stateName);
+				var state = getState(stateName);
+
+				states[key] = prepare(state.name);
 			});
 
 			return $q.all(states);
 		}
 
 		// Resolves all the dependencies of a state, and return it in a promise.
-		function prepare (stateName) {
+		function prepare (stateName, options) {
 			// Create a new variable to be filled with
 			// all the important values of each views.
 			var locals = {};
@@ -288,13 +322,23 @@ function $StateProvider () {
 				throw new Error('There is not state named ' + stateName);
 			}
 
+			if(!isDefined(options)) {
+				options = {
+					locals: {}
+				};
+			}
+
+			if(isObject(options.locals)) {
+				extend(locals, options.locals);
+			}
+
 			// resolving each view of the state.
 			forEach(nextState.views, function (view, viewName) {
 				var viewLocals = locals[viewName] = {};
 
 				// Throw all that we have in the view resolve object into the locals
 				// to be resolved and used to the view when everything is ready to use.
-				angular.extend(viewLocals, view.resolve);
+				extend(viewLocals, view.resolve);
 
 				// Defining the three view param there are not part of the resolve,
 				// but sometimes need to be resolved. Example:
@@ -322,14 +366,14 @@ function $StateProvider () {
 						return;
 					}
 
-					if(isString(value) || (isFunction(value) && key === 'controller')) {
+					if(isFunction(value) && newKey !== '$controller') {
+						viewLocals[newKey] = value;
+					}
+
+					if(isString(value) || (isFunction(value) && newKey === '$controller')) {
 						viewLocals[newKey] = function () {
 							return value;
 						};
-					}
-
-					if(isFunction(value) && key !== 'controller') {
-						viewLocals[newKey] = value;
 					}
 				});
 
@@ -357,6 +401,9 @@ function $StateProvider () {
 						// go make a http request trying to find our template.
 						return $q.when(($templateCache.get($templateUrl) ||	$http.get($templateUrl)))
 							.then(function (r) {
+								// Must save this template in $templateCache for future use.
+								$templateCache.put($templateUrl, r.data);
+
 								return (r.data || r);
 							});
 					};
@@ -374,9 +421,10 @@ function $StateProvider () {
 			var current = nextState;
 			current.locals = locals;
 
-			// all the state dependencies
-			// has been solved, now tell to
-			// the views to render
+			// All the state dependencies
+			// has been solved, now return
+			// a promise with this data, which
+			// can be used by any 'stView' directive
 			return $q.all(promises).then(function () {
 				return current;
 			});
@@ -386,22 +434,43 @@ function $StateProvider () {
 	};
 }
 
-angular.module('ngRouter.state', ['ngRouter.async'])
+angular.module('ngRouter.state', ['ngRouter.async', 'ngRouter.url'])
+	.value('$stateParams', {})
 	.provider('$state', $StateProvider);
 'use strict';
 
 var STATE_PARAMS_REGEXP = /(?:[\:\{])([A-z]{0,})(?:[\}]|)/g;
 
-function matchParams (url) {
-	if(!isString(url)) {
-		throw new Error('The url must be a string.');
-	}
-
-	return STATE_PARAMS_REGEXP.exec(url);
-}	
-
 function $UrlProvider () {
-	this.$get = function $UrlFactory () {
+	this.$get = function $UrlFactory ($location) {
+		var $url = {};
+
+		$url.go = function (path, stateParams) {
+			if(stateParams) {
+				path = $url.params(stateUrl, stateParams);
+			}
+
+			$location.path(path);
+		};
+
+		$url.params = function (stateUrl, stateParams) {
+			var match;
+
+			if(!(match = stateUrl.match(STATE_PARAMS_REGEXP))) {
+				return stateUrl;
+			}
+
+			match.forEach(function (m){
+				var key = m.replace(/[\{\}\:]/g, '');
+				var param = stateParams[key] || '';
+
+				stateUrl = stateUrl.replace(new RegExp(m, 'g'), param)
+			});
+
+			return stateUrl;
+		};
+
+		return $url;
 	};
 }
 
@@ -421,7 +490,7 @@ function $StViewDirective ($state, $animate, $interpolate) {
 			var currentElement;
 			var previousLeaveAnimation;
 
-			scope.$on('$stateChangeSuccess', update);
+			scope.$on('$viewContentLoading', update);
 
 			update();
 

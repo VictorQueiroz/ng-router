@@ -9,10 +9,10 @@ angular.module('ngRouter.async', [])
 
 			$async.resolve = resolve;
 
-			// resolves an object with dependencies
+			// Resolves an object with dependencies
 			// invoke each key value with $injector
 			// solves all the promises queued and then
-			// resolve the resolve function promise
+			// resolve the resolve function promise.
 			function resolve (obj, locals) {
 				var promises = [];
 				var deferred = $q.defer();
@@ -26,9 +26,9 @@ angular.module('ngRouter.async', [])
 					var next = this.next;
 					var promise = isString(value) ? $injector.get(value) : $injector.invoke(value, {}, obj);
 
-					// if is a promise, add it to the promises variable
+					// If is a promise, add it to the promises variable
 					// to be solved later and only return when, all promises
-					// got resolved
+					// got resolved.
 					if(promise && promise.then) {
 						return promises.push(promise.then(function (value) {
 							obj[key] = value;
@@ -41,12 +41,11 @@ angular.module('ngRouter.async', [])
 
 					next();
 				})
-				// only resolve all the promises
-				// atached by the invokes/instantiates
-				// after the $async.forEach
-				// finishes the loop
+				// Only resolve all the promises
+				// attached by the invokes/instantiates
+				// after the $async.forEach finishes the loop.
 				.then(function () {
-					// resolve all the queued promises
+					// Resolve all the queued promises
 					// atached by the invokes/instantiates
 					$q.all(promises).then(function () {
 						deferred.resolve(obj);
